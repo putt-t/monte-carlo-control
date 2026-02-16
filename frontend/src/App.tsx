@@ -33,7 +33,6 @@ type SeriesPoint = {
 
 type ChartResult = {
     trainingPath: string
-    evalPath: string
     yTicks: Array<{ y: number; label: string }>
     xTicks: Array<{ x: number; label: string; anchor: 'start' | 'middle' | 'end' }>
 }
@@ -132,16 +131,6 @@ function downsampleByBucket(series: number[], maxPoints: number): SeriesPoint[] 
     return sampled
 }
 
-function downsampleByStride(points: SeriesPoint[], maxPoints: number): SeriesPoint[] {
-    if (points.length <= maxPoints) return points
-    const sampled: SeriesPoint[] = []
-    const stride = points.length / maxPoints
-    for (let i = 0; i < maxPoints; i += 1) {
-        sampled.push(points[Math.min(points.length - 1, Math.floor(i * stride))])
-    }
-    return sampled
-}
-
 function pointsToPath(points: SeriesPoint[], maxEpisode: number, yMin: number, yRange: number): string {
     if (points.length < 2) return ''
     return points
@@ -153,16 +142,13 @@ function pointsToPath(points: SeriesPoint[], maxEpisode: number, yMin: number, y
         .join(' ')
 }
 
-function buildChart(rewardHistory: number[], evalHistory: EvalPoint[]): ChartResult | null {
+function buildChart(rewardHistory: number[]): ChartResult | null {
     const trainingPoints = downsampleByBucket(computeRollingAverage(rewardHistory, 50), 600)
-    const evalPoints = downsampleByStride(evalHistory.map((p) => ({ episode: p.episode, value: p.avg_return })), 600)
-
-    const allPoints = [...trainingPoints, ...evalPoints]
-    if (allPoints.length < 2) return null
+    if (trainingPoints.length < 2) return null
 
     let minValue = Number.POSITIVE_INFINITY
     let maxValue = Number.NEGATIVE_INFINITY
-    for (const point of allPoints) {
+    for (const point of trainingPoints) {
         if (point.value < minValue) minValue = point.value
         if (point.value > maxValue) maxValue = point.value
     }
@@ -175,7 +161,6 @@ function buildChart(rewardHistory: number[], evalHistory: EvalPoint[]): ChartRes
     const maxEpisode = Math.max(
         2,
         rewardHistory.length,
-        evalHistory.length > 0 ? evalHistory[evalHistory.length - 1].episode : 0,
     )
 
     const yTicks = Array.from({ length: 5 }, (_, i) => {
@@ -195,7 +180,6 @@ function buildChart(rewardHistory: number[], evalHistory: EvalPoint[]): ChartRes
 
     return {
         trainingPath: pointsToPath(trainingPoints, maxEpisode, yMin, yRange),
-        evalPath: pointsToPath(evalPoints, maxEpisode, yMin, yRange),
         yTicks,
         xTicks,
     }
@@ -286,7 +270,7 @@ function App() {
 
     const chartData = useMemo(() => {
         if (!snapshot) return null
-        return buildChart(snapshot.reward_history, snapshot.eval_history)
+        return buildChart(snapshot.reward_history)
     }, [snapshot])
 
     return (
@@ -468,17 +452,12 @@ function App() {
                                         </g>
                                     ))}
                                     {chartData.trainingPath ? <polyline className="chart-line chart-line-train" points={chartData.trainingPath} /> : null}
-                                    {chartData.evalPath ? <polyline className="chart-line chart-line-eval" points={chartData.evalPath} /> : null}
                                 </>
                             ) : null}
                             <text x="16" y="120" className="axis-label y-label" transform="rotate(-90, 16, 120)">Rolling Average Return</text>
                             <text x={CHART_MARGIN.left + CHART_INNER_WIDTH / 2} y="258" className="axis-label">Episode</text>
                         </svg>
-                        <div className="chart-legend">
-                            <span className="legend-item"><i className="legend-swatch legend-train" /> Train (rolling avg, eps-greedy)</span>
-                            <span className="legend-item"><i className="legend-swatch legend-eval" /> Greedy eval (eps=0)</span>
-                        </div>
-                        <p className="caption">Train and evaluation curves on shared axes across all episodes.</p>
+                        <p className="caption">Training rolling average (window=50) across all episodes.</p>
                     </section>
                 </main>
             )}
