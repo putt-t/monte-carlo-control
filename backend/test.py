@@ -1,17 +1,19 @@
 import random
+import matplotlib.pyplot as plt
+import numpy as np
 
 N = 1000
 
 # grid
 H = 3
-W = 4
+W = 5
 
 # start and goal to reach
 START = (2, 0)
-GOAL = (0, 3)
+GOAL = (2, 4)
 
 # obstacle 
-WALLS = {(1, 1)}
+WALLS = {(1, 2), (2, 2)}
 
 ACTIONS = ["U", "D", "L", "R"]
 
@@ -114,20 +116,6 @@ def greedy_action(Q, state):
     best_actions = [a for a, q in action_values.items() if q == max_q]
     return random.choice(best_actions)
 
-def print_policy(Q):
-    arrow = {"U": "^", "D": "v", "L": "<", "R": ">"}
-    for r in range(H):
-        row = []
-        for c in range(W):
-            state = (r, c)
-            if state in WALLS:
-                row.append("#")
-            elif state == GOAL:
-                row.append("G")
-            else:
-                row.append(arrow[greedy_action(Q, state)])
-        print(" ".join(row))
-
 alpha = 0.1
 reward_history = []
 for episode in range(N):
@@ -137,6 +125,15 @@ for episode in range(N):
     update_q(Q, traj, alpha)
     if (episode + 1) % 100 == 0:
         recent_mean = sum(reward_history[-100:]) / len(reward_history[-100:])
-        print(f"episode {episode + 1}: avg_return in the last 100={recent_mean:.2f}")
-        print_policy(Q)
-        print()
+        print(f"episode {episode + 1}: {recent_mean:.2f}")
+
+fig, ax = plt.subplots(figsize=(10, 5))
+window = 50
+moving_avg = [np.mean(reward_history[max(0, i-window):i+1]) for i in range(len(reward_history))]
+ax.plot(moving_avg)
+ax.set_xlabel('Episode')
+ax.set_ylabel('Moving Average Return')
+ax.set_title('Learning Curve')
+ax.grid(True)
+plt.tight_layout()
+plt.show()
