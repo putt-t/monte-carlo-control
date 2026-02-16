@@ -1,5 +1,7 @@
 import random
 
+N = 1000
+
 # grid
 H = 3
 W = 4
@@ -42,23 +44,39 @@ def step(state, action):
         r, c = r, c + 1
 
     if (r,c) == GOAL:
-        return ((r,c), 10, True)
+        return ((r,c), GOAL_REWARD, True)
 
     return ((r,c), STEP_REWARD, False)
 
-def generate_episode():
+
+def choose_action_eps_greedy(Q, state, epsilon):
+    action_values = Q[state]
+    max_q = max(action_values.values())
+    best_actions = [a for a, q in action_values.items() if q == max_q]
+
+    if random.random() < epsilon:
+        return random.choice(ACTIONS)
+    
+    return random.choice(best_actions)
+
+def generate_episode(Q, epsilon):
     state = START
     trajectory = []
+    episode_return = 0
     for t in range(MAX_STEPS):
-        action = random.choice(ACTIONS)
+        if state == GOAL:
+            break
+        action = choose_action_eps_greedy(Q, state, epsilon)
         ns, r, d = step(state, action)
+        episode_return += r
         trajectory.append((state, action, r))
         state = ns
         if d:
             break
     
-    return trajectory
+    return (trajectory, episode_return)
 
+# only for debugging purposes
 def calculate_returns(trajectory):
     returns = [0.0] * len(trajectory)
     G = 0.0
@@ -70,7 +88,55 @@ def calculate_returns(trajectory):
 
     return returns
 
-traj = generate_episode()
-rets = calculate_returns(traj)
+def all_states():
+    for r in range(H):
+        for c in range(W):
+            s = (r,c)
+            if s not in WALLS:
+                yield s
+        
+Q = {
+    s: {a: 0.0 for a in ACTIONS}
+    for s in all_states()
+    if s != GOAL
+}
 
+def update_q(Q, trajectory, alpha):
+    G = 0.0
+    for i in reversed(range(len(trajectory))):
+        state, action, reward = trajectory[i]
+        G = reward + GAMMA * G
+        Q[state][action] += alpha * (G-Q[state][action])
 
+def greedy_action(Q, state):
+    action_values = Q[state]
+    max_q = max(action_values.values())
+    best_actions = [a for a, q in action_values.items() if q == max_q]
+    return random.choice(best_actions)
+
+def print_policy(Q):
+    arrow = {"U": "^", "D": "v", "L": "<", "R": ">"}
+    for r in range(H):
+        row = []
+        for c in range(W):
+            state = (r, c)
+            if state in WALLS:
+                row.append("#")
+            elif state == GOAL:
+                row.append("G")
+            else:
+                row.append(arrow[greedy_action(Q, state)])
+        print(" ".join(row))
+
+alpha = 0.1
+reward_history = []
+for episode in range(N):
+    epsilon = max(0.05, 1.0 - episode / N)
+    traj, reward = generate_episode(Q, epsilon)
+    reward_history.append(reward)
+    update_q(Q, traj, alpha)
+    if (episode + 1) % 100 == 0:
+        recent_mean = sum(reward_history[-100:]) / len(reward_history[-100:])
+        print(f"episode {episode + 1}: avg_return in the last 100={recent_mean:.2f}")
+        print_policy(Q)
+        print()
