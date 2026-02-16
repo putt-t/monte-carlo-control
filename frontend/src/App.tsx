@@ -53,6 +53,9 @@ const CHART_HEIGHT = 280
 const CHART_MARGIN = { top: 10, right: 20, bottom: 60, left: 58 }
 const CHART_INNER_WIDTH = CHART_WIDTH - CHART_MARGIN.left - CHART_MARGIN.right
 const CHART_INNER_HEIGHT = CHART_HEIGHT - CHART_MARGIN.top - CHART_MARGIN.bottom
+const LEARNING_CURVE_Y_MIN = -55
+const LEARNING_CURVE_Y_MAX = 10
+const LEARNING_CURVE_Y_TICK_STEP = 5
 
 function keyOf(r: number, c: number) {
     return `${r},${c}`
@@ -136,7 +139,8 @@ function pointsToPath(points: SeriesPoint[], maxEpisode: number, yMin: number, y
     return points
         .map((point) => {
             const x = CHART_MARGIN.left + ((point.episode - 1) / (maxEpisode - 1)) * CHART_INNER_WIDTH
-            const y = CHART_MARGIN.top + (1 - (point.value - yMin) / yRange) * CHART_INNER_HEIGHT
+            const clampedValue = Math.max(LEARNING_CURVE_Y_MIN, Math.min(LEARNING_CURVE_Y_MAX, point.value))
+            const y = CHART_MARGIN.top + (1 - (clampedValue - yMin) / yRange) * CHART_INNER_HEIGHT
             return `${x},${y}`
         })
         .join(' ')
@@ -145,30 +149,21 @@ function pointsToPath(points: SeriesPoint[], maxEpisode: number, yMin: number, y
 function buildChart(rewardHistory: number[]): ChartResult | null {
     const trainingPoints = downsampleByBucket(computeRollingAverage(rewardHistory, 50), 600)
     if (trainingPoints.length < 2) return null
-
-    let minValue = Number.POSITIVE_INFINITY
-    let maxValue = Number.NEGATIVE_INFINITY
-    for (const point of trainingPoints) {
-        if (point.value < minValue) minValue = point.value
-        if (point.value > maxValue) maxValue = point.value
-    }
-
-    const span = Math.max(4, maxValue - minValue)
-    const yMin = minValue - span * 0.12
-    const yMax = maxValue + span * 0.12
-    const yRange = yMax - yMin || 1
+    const yMin = LEARNING_CURVE_Y_MIN
+    const yMax = LEARNING_CURVE_Y_MAX
+    const yRange = yMax - yMin
 
     const maxEpisode = Math.max(
         2,
         rewardHistory.length,
     )
 
-    const yTicks = Array.from({ length: 5 }, (_, i) => {
-        const frac = i / 4
-        const value = yMax - frac * yRange
+    const yTicks: Array<{ y: number; label: string }> = []
+    for (let value = yMax; value >= yMin; value -= LEARNING_CURVE_Y_TICK_STEP) {
+        const frac = (yMax - value) / yRange
         const y = CHART_MARGIN.top + frac * CHART_INNER_HEIGHT
-        return { y, label: value.toFixed(1) }
-    })
+        yTicks.push({ y, label: `${value}` })
+    }
 
     const xTicks = Array.from({ length: 6 }, (_, i) => {
         const frac = i / 5
